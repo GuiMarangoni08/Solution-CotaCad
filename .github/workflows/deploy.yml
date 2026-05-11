@@ -1,0 +1,41 @@
+name: Deploy CotaCAD
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ── Backend → Hostinger VPS ──────────────────────────────────────────────
+  deploy-backend:
+    name: Deploy Backend (Hostinger VPS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/cotacad
+            git pull origin main
+            cd backend
+            docker compose down
+            docker compose up -d --build
+            echo "Backend deployado com sucesso!"
+
+  # ── Frontend → Vercel (auto via Vercel GitHub Integration) ───────────────
+  # O Vercel detecta push na branch main automaticamente.
+  # Este job apenas confirma que o backend está saudável antes do Vercel buildar.
+  check-backend:
+    name: Verificar saúde do backend
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    steps:
+      - name: Health check
+        run: |
+          sleep 15
+          curl --fail ${{ secrets.BACKEND_URL }}/health || exit 1
+          echo "Backend OK!"
