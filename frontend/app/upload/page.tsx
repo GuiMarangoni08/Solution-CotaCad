@@ -5,7 +5,7 @@ import axios from "axios";
 import toast from "react-hot-toast";
 import UploadZone from "@/components/UploadZone";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+const API = process.env.NEXT_PUBLIC_API_URL || "http://72.61.6.119:8000/api";
 
 export default function UploadPage() {
   const router = useRouter();

@@ -6,7 +6,7 @@ import Link from "next/link";
 import TabelaAmbientes, { type Ambiente } from "@/components/TabelaAmbientes";
 import ExportBar from "@/components/ExportBar";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+const API = process.env.NEXT_PUBLIC_API_URL || "http://72.61.6.119:8000/api";
 
 interface Projeto {
   id: string;
