@@ -4,7 +4,7 @@ import axios from "axios";
 import toast from "react-hot-toast";
 import clsx from "clsx";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://72.61.6.119:8000/api";
+const API = process.env.NEXT_PUBLIC_API_URL || "https://unlock-method-kingston-partition.trycloudflare.com/api";
 
 export interface Ambiente {
   id: string;
