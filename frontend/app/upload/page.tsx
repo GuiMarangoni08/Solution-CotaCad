@@ -5,7 +5,7 @@ import axios from "axios";
 import toast from "react-hot-toast";
 import UploadZone from "@/components/UploadZone";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://flashing-quality-cell-auditor.trycloudflare.com/api";
+const API = process.env.NEXT_PUBLIC_API_URL || "https://cotacad-solution.duckdns.org/api";
 
 export default function UploadPage() {
   const router = useRouter();

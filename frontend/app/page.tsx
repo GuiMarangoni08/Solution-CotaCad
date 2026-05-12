@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import axios from "axios";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://flashing-quality-cell-auditor.trycloudflare.com/api";
+const API = process.env.NEXT_PUBLIC_API_URL || "https://cotacad-solution.duckdns.org/api";
 
 interface ProjetoItem {
   id: string;

@@ -2,7 +2,7 @@
 import axios from "axios";
 import toast from "react-hot-toast";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://flashing-quality-cell-auditor.trycloudflare.com/api";
+const API = process.env.NEXT_PUBLIC_API_URL || "https://cotacad-solution.duckdns.org/api";
 
 interface Ambiente {
   nome: string | null;
