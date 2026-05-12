@@ -9,6 +9,8 @@ interface Ambiente {
   nome_flag: string;
   area: number | null;
   area_flag: string;
+  comprimento: number | null;
+  largura: number | null;
   perimetro: number | null;
   perimetro_flag: string;
   pe_direito: number | null;
@@ -25,11 +27,13 @@ interface Props {
 const FLAG = { confirmed: "", estimated: " ⚠️", missing: " ✗" } as Record<string, string>;
 
 function toTSV(ambientes: Ambiente[]): string {
-  const header = ["Ambiente", "Camada", "Área (m²)", "Perímetro (m)", "Pé Direito (m)", "Fonte"].join("\t");
+  const header = ["Ambiente", "Camada", "Área (m²)", "C (m)", "L (m)", "Perímetro (m)", "Pé Direito (m)", "Fonte"].join("\t");
   const rows = ambientes.map((a) => [
     (a.nome ?? "— sem nome —") + (FLAG[a.nome_flag] ?? ""),
     a.camada ?? "—",
     a.area != null ? `${a.area.toFixed(2)}${FLAG[a.area_flag] ?? ""}` : "✗",
+    a.comprimento != null ? a.comprimento.toFixed(2) : "—",
+    a.largura != null ? a.largura.toFixed(2) : "—",
     a.perimetro != null ? `${a.perimetro.toFixed(2)}${FLAG[a.perimetro_flag] ?? ""}` : "✗",
     a.pe_direito != null ? `${a.pe_direito.toFixed(2)}${FLAG[a.pe_direito_flag] ?? ""}` : "✗",
     a.fonte,

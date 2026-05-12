@@ -12,6 +12,8 @@ export interface Ambiente {
   nome_flag: string;
   area: number | null;
   area_flag: string;
+  comprimento: number | null;
+  largura: number | null;
   perimetro: number | null;
   perimetro_flag: string;
   pe_direito: number | null;
@@ -183,6 +185,8 @@ export default function TabelaAmbientes({ ambientes, onChange }: Props) {
               <th className="px-4 py-3 text-left font-semibold">Ambiente</th>
               <th className="px-4 py-3 text-left font-semibold">Camada</th>
               <th className="px-4 py-3 text-right font-semibold">Área (m²)</th>
+              <th className="px-4 py-3 text-right font-semibold">C (m)</th>
+              <th className="px-4 py-3 text-right font-semibold">L (m)</th>
               <th className="px-4 py-3 text-right font-semibold">Perímetro (m)</th>
               <th className="px-4 py-3 text-right font-semibold">Pé Direito (m)</th>
               <th className="px-4 py-3 text-center font-semibold">Fonte</th>
@@ -217,6 +221,12 @@ export default function TabelaAmbientes({ ambientes, onChange }: Props) {
                       flag={amb.area_flag}
                     />
                   </td>
+                  <td className="px-4 py-3 text-right text-gray-700">
+                    {amb.comprimento != null ? amb.comprimento.toFixed(2) : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-700">
+                    {amb.largura != null ? amb.largura.toFixed(2) : <span className="text-gray-300">—</span>}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <EditableCell
                       ambienteId={amb.id}
@@ -245,7 +255,7 @@ export default function TabelaAmbientes({ ambientes, onChange }: Props) {
             <tr className="bg-brand/10 border-t-2 border-brand/20 font-bold">
               <td colSpan={2} className="px-4 py-3 text-brand">TOTAL</td>
               <td className="px-4 py-3 text-right text-brand">{totalArea.toFixed(2)} m²</td>
-              <td colSpan={3} />
+              <td colSpan={5} />
             </tr>
           </tfoot>
         </table>

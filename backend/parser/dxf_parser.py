@@ -227,6 +227,23 @@ def _extract_from_blocks(doc, factor: float) -> list:
     return results
 
 
+def _get_dimensions(poly: Polygon) -> tuple[Optional[float], Optional[float]]:
+    """Retorna (comprimento, largura) em metros via retângulo mínimo envolvente."""
+    try:
+        mrr = poly.minimum_rotated_rectangle
+        coords = list(mrr.exterior.coords)
+        sides = []
+        for i in range(4):
+            dx = coords[i + 1][0] - coords[i][0]
+            dy = coords[i + 1][1] - coords[i][1]
+            sides.append(math.sqrt(dx * dx + dy * dy))
+        comp = round(max(sides[0], sides[1]), 2)
+        larg = round(min(sides[0], sides[1]), 2)
+        return comp, larg
+    except Exception:
+        return None, None
+
+
 def _deduplicate(ambientes: list) -> list:
     """Remove ambientes com polígonos quase idênticos (sobreposição > 90%)."""
     keep = []
@@ -308,6 +325,7 @@ def parse_dxf(file_path: str, user_unit: str = "mm") -> list[dict]:
         texts_inside = _text_inside(poly, texts)
         room_name = _find_room_name(texts_inside, layer)
         pd_val, pd_flag = _find_pd(texts_inside, factor)
+        comp, larg = _get_dimensions(poly)
 
         amb = {
             "nome": room_name,
@@ -318,6 +336,8 @@ def parse_dxf(file_path: str, user_unit: str = "mm") -> list[dict]:
             "perimetro_flag": area_flag,
             "pe_direito": pd_val,
             "pe_direito_flag": pd_flag,
+            "comprimento": comp,
+            "largura": larg,
             "camada": layer,
             "fonte": "dxf",
             "_polygon": poly,

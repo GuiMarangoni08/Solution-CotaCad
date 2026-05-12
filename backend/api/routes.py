@@ -50,6 +50,8 @@ def _salvar_ambientes(db: Session, projeto_id: str, ambientes: list[dict]):
             perimetro_flag=a.get("perimetro_flag", "missing"),
             pe_direito=a.get("pe_direito"),
             pe_direito_flag=a.get("pe_direito_flag", "missing"),
+            comprimento=a.get("comprimento"),
+            largura=a.get("largura"),
             camada=a.get("camada"),
             fonte=a.get("fonte", "dxf"),
             ordem=i,
@@ -193,7 +195,7 @@ def exportar_xlsx(projeto_id: str, db: Session = Depends(get_db)):
     ws.title = "Ambientes"
 
     # Cabeçalho
-    headers = ["Ambiente", "Camada", "Área (m²)", "Perímetro (m)", "Pé Direito (m)", "Fonte"]
+    headers = ["Ambiente", "Camada", "Área (m²)", "C (m)", "L (m)", "Perímetro (m)", "Pé Direito (m)", "Fonte"]
     header_fill = PatternFill("solid", fgColor="1E3A5F")
     header_font = Font(bold=True, color="FFFFFF")
 
@@ -209,20 +211,24 @@ def exportar_xlsx(projeto_id: str, db: Session = Depends(get_db)):
     for row, amb in enumerate(sorted(p.ambientes, key=lambda x: x.ordem), 2):
         nome_val = (amb.nome or "— sem nome —") + FLAG_SUFFIX.get(amb.nome_flag, "")
         area_val = f"{amb.area:.2f}{FLAG_SUFFIX.get(amb.area_flag, '')}" if amb.area else "✗"
+        c_val = f"{amb.comprimento:.2f}" if amb.comprimento else "—"
+        l_val = f"{amb.largura:.2f}" if amb.largura else "—"
         perim_val = f"{amb.perimetro:.2f}{FLAG_SUFFIX.get(amb.perimetro_flag, '')}" if amb.perimetro else "✗"
         pd_val = f"{amb.pe_direito:.2f}{FLAG_SUFFIX.get(amb.pe_direito_flag, '')}" if amb.pe_direito else "✗"
 
         ws.cell(row=row, column=1, value=nome_val)
         ws.cell(row=row, column=2, value=amb.camada or "—")
         ws.cell(row=row, column=3, value=area_val)
-        ws.cell(row=row, column=4, value=perim_val)
-        ws.cell(row=row, column=5, value=pd_val)
-        ws.cell(row=row, column=6, value=amb.fonte)
+        ws.cell(row=row, column=4, value=c_val)
+        ws.cell(row=row, column=5, value=l_val)
+        ws.cell(row=row, column=6, value=perim_val)
+        ws.cell(row=row, column=7, value=pd_val)
+        ws.cell(row=row, column=8, value=amb.fonte)
 
         # Linha alternada
         if row % 2 == 0:
             fill = PatternFill("solid", fgColor="F0F4F8")
-            for col in range(1, 7):
+            for col in range(1, 9):
                 ws.cell(row=row, column=col).fill = fill
 
     # Ajusta largura das colunas

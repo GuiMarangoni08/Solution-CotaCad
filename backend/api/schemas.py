@@ -16,6 +16,8 @@ class AmbienteOut(BaseModel):
     perimetro_flag: Flag
     pe_direito: Optional[float]
     pe_direito_flag: Flag
+    comprimento: Optional[float]
+    largura: Optional[float]
     camada: Optional[str]
     fonte: Fonte
     ordem: int

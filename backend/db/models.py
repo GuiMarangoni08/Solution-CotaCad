@@ -44,6 +44,9 @@ class Ambiente(Base):
     pe_direito = Column(Float, nullable=True)
     pe_direito_flag = Column(String, default="missing")
 
+    comprimento = Column(Float, nullable=True)
+    largura = Column(Float, nullable=True)
+
     camada = Column(String, nullable=True)
     fonte = Column(String, default="dxf")               # dxf | pdf | dxf+pdf | manual
     ordem = Column(Integer, default=0)

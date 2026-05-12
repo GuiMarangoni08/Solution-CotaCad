@@ -196,6 +196,8 @@ def _parse_cluster(cluster: list[dict], user_unit: str = "mm") -> Optional[dict]
         "perimetro_flag": perimetro_flag,
         "pe_direito": pe_direito,
         "pe_direito_flag": pe_direito_flag,
+        "comprimento": None,
+        "largura": None,
         "camada": None,
         "fonte": "pdf",
     }
