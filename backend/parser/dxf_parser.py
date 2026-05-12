@@ -1,16 +1,52 @@
 """
-Parser DXF — extrai ambientes com área, perímetro e pé direito.
-Suporta LWPOLYLINE, POLYLINE, HATCH e INSERT/BLOCK.
+Parser DXF — extrai ambientes com área, perímetro, comprimento, largura e pé direito.
+Fontes: LWPOLYLINE, POLYLINE, HATCH, BLOCK/INSERT, DIMENSION entities.
+Vão osso: prioriza camadas estruturais (PAREDE, ALVENARIA, WALL) e ignora acabamentos.
 """
 
 import re
 import math
 from typing import Optional
 import ezdxf
-from shapely.geometry import Polygon, Point, MultiPolygon
+from shapely.geometry import Polygon, Point, MultiPolygon, LineString
 from shapely.ops import unary_union
 from shapely.validation import make_valid
 from .unit_normalizer import get_factor, to_m
+
+# ── Camadas estruturais (vão osso) ───────────────────────────────────────────
+
+_STRUCTURAL_MARKERS = [
+    "parede", "alvenaria", "wall", "muro", "vao", "vão",
+    "estrutura", "alv", "bloco", "tijolo", "concreto",
+]
+_FINISHING_MARKERS = [
+    "revestimento", "reboco", "gesso", "ceramica", "azulejo",
+    "acabamento", "pintura", "textura", "porcelana", "drywall",
+    "emboço", "emboco", "chapisco",
+]
+_EXCLUDED_LAYER_LOWER = [
+    "mob", "furniture", "mobiliario", "mobiliário",
+    "dim", "cota", "dimensao", "dimensão",
+    "text", "nota", "anotacao",
+    "hachura", "pattern",
+    "north", "norte", "grid", "eixo",
+    "title", "titulo", "carimbo", "legenda",
+    "eletrica", "hidraulica", "estrutural", "fundacao",
+    "pen ", "pen0", "pen1", "pen2", "pen3",
+]
+
+def _is_structural_layer(layer: str) -> bool:
+    """True se a camada representa parede estrutural (vão osso)."""
+    low = layer.lower()
+    if any(x in low for x in _FINISHING_MARKERS):
+        return False
+    return any(x in low for x in _STRUCTURAL_MARKERS)
+
+def _layer_excluded(layer: str) -> bool:
+    low = layer.lower()
+    return any(kw in low for kw in _EXCLUDED_LAYER_LOWER)
+
+# ── Palavras-chave de ambiente ────────────────────────────────────────────────
 
 _ROOM_KEYWORDS = [
     "sala", "quarto", "suite", "suíte", "cozinha", "banheiro", "lavabo",
@@ -19,22 +55,7 @@ _ROOM_KEYWORDS = [
     "dormitorio", "dormitório", "living", "jantar", "circulação", "circulacao",
     "terraço", "terraco", "quintal", "jardim", "piscina", "closet",
     "depósito", "deposito", "acesso", "entrada", "lobby", "recepção",
-    "recpcao", "recepcao", "serviço", "servico", "roupeiro", "dressing",
-    "amb", "ambiente", "apto", "apartamento"
-]
-
-# Camadas que claramente NÃO são ambientes
-_EXCLUDED_LAYER_LOWER = [
-    "mob", "furniture", "mobiliario", "mobiliário",
-    "dim", "cota", "dimensao", "dimensão", "quota",
-    "text", "nota", "anotacao", "anotação",
-    "hachura", "pattern",
-    "north", "norte", "compass",
-    "grid", "eixo", "axis",
-    "title", "titulo", "carimbo", "legenda",
-    "eletrica", "eletrico", "hidraulica", "hidraulico",
-    "estrutura", "estrutural", "fundacao",
-    "pen ", "pen0", "pen1", "pen2", "pen3",
+    "recepcao", "serviço", "servico", "amb", "ambiente",
 ]
 
 _PD_PATTERNS = [
@@ -46,7 +67,7 @@ _PD_PATTERNS = [
 ]
 
 _MAX_GAP_M = 0.5
-_MIN_AREA_M2 = 0.05  # abaixo disso descartamos (5cm x 1m)
+_MIN_AREA_M2 = 0.05
 
 
 def _parse_number(s: str) -> float:
@@ -55,26 +76,7 @@ def _parse_number(s: str) -> float:
 
 def _looks_like_room(text: str) -> bool:
     t = text.lower().strip()
-    for kw in _ROOM_KEYWORDS:
-        if kw in t:
-            return True
-    return False
-
-
-def _layer_excluded(layer: str) -> bool:
-    low = layer.lower()
-    return any(kw in low for kw in _EXCLUDED_LAYER_LOWER)
-
-
-def _extract_pd_from_text(text: str, factor: float) -> Optional[float]:
-    for pattern in _PD_PATTERNS:
-        m = re.search(pattern, text, re.IGNORECASE)
-        if m:
-            val = _parse_number(m.group(1))
-            if val > 10:
-                val = val * factor
-            return round(val, 2)
-    return None
+    return any(kw in t for kw in _ROOM_KEYWORDS)
 
 
 def _gap(pts) -> float:
@@ -111,20 +113,28 @@ def _text_inside(polygon: Polygon, texts: list) -> list:
 
 
 def _find_room_name(texts_inside: list, layer: str) -> Optional[str]:
-    # 1. Texto que parece nome de ambiente dentro do polígono
     for t in texts_inside:
         if _looks_like_room(t["text"]):
             return t["text"].strip()
-    # 2. Qualquer texto curto não-numérico dentro
     for t in texts_inside:
         val = t["text"].strip()
         if 1 < len(val) <= 40 and not re.fullmatch(r"[\d\s.,mM²%°/\\-]+", val):
             return val
-    # 3. Usa nome da camada (limpando prefixos comuns)
     if layer:
         cleaned = re.sub(r"^(A[-_]|AI[-_]|ARQ[-_]|\d+[-_])", "", layer, flags=re.IGNORECASE).strip()
         if cleaned and not _layer_excluded(cleaned):
             return cleaned
+    return None
+
+
+def _extract_pd_from_text(text: str, factor: float) -> Optional[float]:
+    for pattern in _PD_PATTERNS:
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m:
+            val = _parse_number(m.group(1))
+            if val > 10:
+                val = val * factor
+            return round(val, 2)
     return None
 
 
@@ -135,6 +145,8 @@ def _find_pd(texts_inside: list, factor: float) -> tuple[Optional[float], str]:
             return val, "confirmed"
     return None, "missing"
 
+
+# ── Extração de textos ────────────────────────────────────────────────────────
 
 def _extract_texts(msp, factor: float) -> list:
     texts = []
@@ -153,8 +165,104 @@ def _extract_texts(msp, factor: float) -> list:
     return texts
 
 
+# ── Extração de DIMENSION entities ───────────────────────────────────────────
+
+def _extract_linear_dimensions(msp, factor: float) -> list[dict]:
+    """
+    Extrai cotas lineares (dimtype 0=Linear, 1=Aligned).
+    Retorna lista de {valor, p1, p2, text_pos}.
+    """
+    dims = []
+    for e in msp:
+        if e.dxftype() != "DIMENSION":
+            continue
+        try:
+            dimtype = e.dxf.dimtype & 0x0F  # máscara para ignorar flags superiores
+            if dimtype not in (0, 1):
+                continue
+            valor = to_m(e.dxf.actual_measurement, factor)
+            if valor <= 0:
+                continue
+            p1 = e.dxf.defpoint
+            p2 = e.dxf.defpoint2
+            tp = e.dxf.text_midpoint
+            dims.append({
+                "valor": round(valor, 3),
+                "p1": (to_m(p1.x, factor), to_m(p1.y, factor)),
+                "p2": (to_m(p2.x, factor), to_m(p2.y, factor)),
+                "text_pos": (to_m(tp.x, factor), to_m(tp.y, factor)),
+            })
+        except Exception:
+            pass
+    return dims
+
+
+def _assign_dims_to_room(
+    poly: Polygon,
+    dims: list[dict],
+    tol: float = 0.5,
+) -> tuple[Optional[float], Optional[float]]:
+    """
+    Associa cotas DIMENSION ao polígono do ambiente.
+    Retorna (comprimento, largura):
+      - comprimento = maior valor encontrado
+      - largura     = segundo maior valor (None se só uma cota)
+    Usa buffer de tol metros para capturar cotas na borda da parede.
+    Cotas compartilhadas entre ambientes são atribuídas a ambos (correto).
+    """
+    expanded = poly.buffer(tol)
+    matched = []
+
+    for d in dims:
+        pt = Point(d["text_pos"])
+        # Cota pertence ao ambiente se o texto está dentro do polígono expandido
+        if expanded.contains(pt):
+            matched.append(d["valor"])
+            continue
+        # Ou se a linha de medida cruzar o polígono (cota na parede compartilhada)
+        try:
+            line = LineString([d["p1"], d["p2"]])
+            if poly.intersects(line.buffer(tol * 0.4)):
+                matched.append(d["valor"])
+        except Exception:
+            pass
+
+    if not matched:
+        return None, None
+
+    # Remove duplicatas muito próximas (tolerância de 2%)
+    unique = []
+    for v in sorted(set(matched), reverse=True):
+        if not any(abs(v - u) / max(u, 0.001) < 0.02 for u in unique):
+            unique.append(v)
+
+    comp = unique[0]
+    larg = unique[1] if len(unique) > 1 else None
+    return comp, larg
+
+
+# ── Bounding-rect mínimo (fallback) ──────────────────────────────────────────
+
+def _get_dimensions(poly: Polygon) -> tuple[Optional[float], Optional[float]]:
+    """Comprimento e largura pelo retângulo mínimo envolvente (estimativa)."""
+    try:
+        mrr = poly.minimum_rotated_rectangle
+        coords = list(mrr.exterior.coords)
+        sides = []
+        for i in range(4):
+            dx = coords[i + 1][0] - coords[i][0]
+            dy = coords[i + 1][1] - coords[i][1]
+            sides.append(math.sqrt(dx * dx + dy * dy))
+        comp = round(max(sides[0], sides[1]), 2)
+        larg = round(min(sides[0], sides[1]), 2)
+        return comp, larg
+    except Exception:
+        return None, None
+
+
+# ── Extração de polilinhas ────────────────────────────────────────────────────
+
 def _polyline_to_pts(entity, factor: float):
-    """Retorna (pts, closed, layer) ou None."""
     try:
         t = entity.dxftype()
         if t == "LWPOLYLINE":
@@ -174,7 +282,6 @@ def _polyline_to_pts(entity, factor: float):
 
 
 def _extract_hatch_polys(msp, factor: float) -> list:
-    """Extrai polígonos de entidades HATCH."""
     results = []
     for e in msp:
         if e.dxftype() != "HATCH":
@@ -183,26 +290,21 @@ def _extract_hatch_polys(msp, factor: float) -> list:
         try:
             for path in e.paths:
                 pts = []
-                path_type = getattr(path, 'PATH_TYPE', '')
-
-                if path_type == 'PolylinePath' or hasattr(path, 'vertices'):
-                    raw = path.vertices
-                    for v in raw:
+                path_type = getattr(path, "PATH_TYPE", "")
+                if path_type == "PolylinePath" or hasattr(path, "vertices"):
+                    for v in path.vertices:
                         try:
                             pts.append((to_m(float(v[0]), factor), to_m(float(v[1]), factor)))
                         except Exception:
                             pass
-
-                elif path_type == 'EdgePath' or hasattr(path, 'edges'):
+                elif path_type == "EdgePath" or hasattr(path, "edges"):
                     for edge in path.edges:
-                        edge_type = getattr(edge, 'EDGE_TYPE', '')
                         try:
-                            if edge_type in ('LineEdge', '') and hasattr(edge, 'start'):
+                            if hasattr(edge, "start"):
                                 s = edge.start
                                 pts.append((to_m(float(s[0]), factor), to_m(float(s[1]), factor)))
                         except Exception:
                             pass
-
                 if len(pts) >= 3:
                     results.append({"pts": pts, "closed": True, "layer": layer, "source": "hatch"})
         except Exception:
@@ -211,11 +313,10 @@ def _extract_hatch_polys(msp, factor: float) -> list:
 
 
 def _extract_from_blocks(doc, factor: float) -> list:
-    """Extrai polilinhas de dentro de blocos inseridos (INSERT)."""
     results = []
     try:
         for block in doc.blocks:
-            if block.name.startswith("*"):  # blocos internos do AutoCAD
+            if block.name.startswith("*"):
                 continue
             for e in block:
                 res = _polyline_to_pts(e, factor)
@@ -227,25 +328,9 @@ def _extract_from_blocks(doc, factor: float) -> list:
     return results
 
 
-def _get_dimensions(poly: Polygon) -> tuple[Optional[float], Optional[float]]:
-    """Retorna (comprimento, largura) em metros via retângulo mínimo envolvente."""
-    try:
-        mrr = poly.minimum_rotated_rectangle
-        coords = list(mrr.exterior.coords)
-        sides = []
-        for i in range(4):
-            dx = coords[i + 1][0] - coords[i][0]
-            dy = coords[i + 1][1] - coords[i][1]
-            sides.append(math.sqrt(dx * dx + dy * dy))
-        comp = round(max(sides[0], sides[1]), 2)
-        larg = round(min(sides[0], sides[1]), 2)
-        return comp, larg
-    except Exception:
-        return None, None
-
+# ── Deduplicação ─────────────────────────────────────────────────────────────
 
 def _deduplicate(ambientes: list) -> list:
-    """Remove ambientes com polígonos quase idênticos (sobreposição > 90%)."""
     keep = []
     polys = []
     for amb in ambientes:
@@ -268,38 +353,58 @@ def _deduplicate(ambientes: list) -> list:
     return keep
 
 
+# ── Parser principal ──────────────────────────────────────────────────────────
+
 def parse_dxf(file_path: str, user_unit: str = "mm") -> list[dict]:
     """
     Retorna lista de ambientes extraídos do DXF.
+    Campos: nome, área, perímetro, comprimento, largura, pé direito, camada, fonte.
+    Comprimento e largura: prioritariamente de entidades DIMENSION;
+    fallback para retângulo mínimo envolvente (estimativa).
+    Vão osso: camadas estruturais têm prioridade sobre acabamentos.
     """
     doc = ezdxf.readfile(file_path)
     msp = doc.modelspace()
     factor = get_factor(doc, user_unit)
 
     texts = _extract_texts(msp, factor)
+    dims  = _extract_linear_dimensions(msp, factor)
 
-    # Coleta todas as fontes de polígonos
+    # Coleta candidatos a polígono de ambiente
     candidates = []
 
-    # 1. Polilinhas diretas no model space
+    # Polilinhas diretas
     for e in msp:
         res = _polyline_to_pts(e, factor)
         if res:
             pts, closed, layer = res
-            candidates.append({"pts": pts, "closed": closed, "layer": layer, "source": "poly"})
+            structural = _is_structural_layer(layer)
+            candidates.append({
+                "pts": pts, "closed": closed,
+                "layer": layer, "source": "poly",
+                "structural": structural,
+            })
 
-    # 2. HATCH entities
-    candidates.extend(_extract_hatch_polys(msp, factor))
+    # HATCH
+    for c in _extract_hatch_polys(msp, factor):
+        c["structural"] = _is_structural_layer(c["layer"])
+        candidates.append(c)
 
-    # 3. Polilinhas dentro de blocos
-    candidates.extend(_extract_from_blocks(doc, factor))
+    # Blocos
+    for c in _extract_from_blocks(doc, factor):
+        c["structural"] = _is_structural_layer(c["layer"])
+        candidates.append(c)
+
+    # Se há camadas estruturais, prioriza-as (vão osso)
+    has_structural = any(c["structural"] for c in candidates)
+    if has_structural:
+        candidates = [c for c in candidates if c["structural"] or not _layer_excluded(c["layer"])]
 
     ambientes = []
 
     for cand in candidates:
-        pts = cand["pts"]
+        pts   = cand["pts"]
         layer = cand["layer"]
-        source = cand.get("source", "poly")
 
         if len(pts) < 3:
             continue
@@ -319,28 +424,33 @@ def parse_dxf(file_path: str, user_unit: str = "mm") -> list[dict]:
         if poly is None or poly.area < _MIN_AREA_M2:
             continue
 
-        area_m2 = round(poly.area, 2)
-        perim_m = round(poly.length, 2)
+        area_m2  = round(poly.area, 2)
+        perim_m  = round(poly.length, 2)
 
         texts_inside = _text_inside(poly, texts)
-        room_name = _find_room_name(texts_inside, layer)
+        room_name    = _find_room_name(texts_inside, layer)
         pd_val, pd_flag = _find_pd(texts_inside, factor)
-        comp, larg = _get_dimensions(poly)
+
+        # Comprimento e Largura — prioridade: DIMENSION entities
+        comp, larg = _assign_dims_to_room(poly, dims)
+        if comp is None:
+            # Fallback: bounding-rect mínimo
+            comp, larg = _get_dimensions(poly)
 
         amb = {
-            "nome": room_name,
-            "nome_flag": "confirmed" if room_name else "missing",
-            "area": area_m2,
-            "area_flag": area_flag,
-            "perimetro": perim_m,
-            "perimetro_flag": area_flag,
-            "pe_direito": pd_val,
-            "pe_direito_flag": pd_flag,
-            "comprimento": comp,
-            "largura": larg,
-            "camada": layer,
-            "fonte": "dxf",
-            "_polygon": poly,
+            "nome":              room_name,
+            "nome_flag":         "confirmed" if room_name else "missing",
+            "area":              area_m2,
+            "area_flag":         area_flag,
+            "perimetro":         perim_m,
+            "perimetro_flag":    area_flag,
+            "pe_direito":        pd_val,
+            "pe_direito_flag":   pd_flag,
+            "comprimento":       comp,
+            "largura":           larg,
+            "camada":            layer,
+            "fonte":             "dxf",
+            "_polygon":          poly,
         }
         ambientes.append(amb)
 
@@ -348,7 +458,7 @@ def parse_dxf(file_path: str, user_unit: str = "mm") -> list[dict]:
     ambientes = _deduplicate(ambientes)
     ambientes.sort(key=lambda a: a.get("area") or 0, reverse=True)
 
-    # Textos de ambiente sem polilinha correspondente
+    # Textos de ambiente sem polilinha associada
     for t in texts:
         if not _looks_like_room(t["text"]):
             continue
@@ -359,20 +469,21 @@ def parse_dxf(file_path: str, user_unit: str = "mm") -> list[dict]:
         )
         if not already_covered:
             ambientes.append({
-                "nome": t["text"].strip(),
-                "nome_flag": "confirmed",
-                "area": None,
-                "area_flag": "missing",
-                "perimetro": None,
-                "perimetro_flag": "missing",
-                "pe_direito": None,
+                "nome":            t["text"].strip(),
+                "nome_flag":       "confirmed",
+                "area":            None,
+                "area_flag":       "missing",
+                "perimetro":       None,
+                "perimetro_flag":  "missing",
+                "pe_direito":      None,
                 "pe_direito_flag": "missing",
-                "camada": None,
-                "fonte": "dxf",
-                "_polygon": None,
+                "comprimento":     None,
+                "largura":         None,
+                "camada":          None,
+                "fonte":           "dxf",
+                "_polygon":        None,
             })
 
-    # Remove campo interno
     for a in ambientes:
         a.pop("_polygon", None)
 
