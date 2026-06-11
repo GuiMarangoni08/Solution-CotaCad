@@ -25,12 +25,21 @@ export default function NovoLevantamentoPage() {
   };
 
   const handleFileSelect = (file: File) => {
-    if (file.name.endsWith('.dxf') || file.type === 'application/octet-stream') {
-      setFormData(prev => ({ ...prev, dxf_file: file }));
-      limparErro();
-    } else {
+    const MAX_SIZE_MB = 2;
+    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+
+    if (!file.name.endsWith('.dxf') && file.type !== 'application/octet-stream') {
       alert('Por favor, selecione um arquivo .dxf');
+      return;
     }
+
+    if (file.size > MAX_SIZE_BYTES) {
+      alert(`Arquivo muito grande. Máximo: ${MAX_SIZE_MB}MB. Seu arquivo: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
+      return;
+    }
+
+    setFormData(prev => ({ ...prev, dxf_file: file }));
+    limparErro();
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -53,6 +62,15 @@ export default function NovoLevantamentoPage() {
     e.preventDefault();
     limparErro();
 
+    // Validações
+    if (!formData.orc_numero.trim()) {
+      alert('ORC Número é obrigatório');
+      return;
+    }
+    if (!formData.nome.trim()) {
+      alert('Nome é obrigatório');
+      return;
+    }
     if (!formData.dxf_file) {
       alert('Selecione um arquivo DXF');
       return;
@@ -61,10 +79,10 @@ export default function NovoLevantamentoPage() {
     try {
       const fd = new FormData();
       fd.append('dxf_file', formData.dxf_file);
-      fd.append('orc_numero', formData.orc_numero);
-      fd.append('nome', formData.nome);
-      fd.append('cliente', formData.cliente);
-      fd.append('empreendimento', formData.empreendimento);
+      fd.append('orc_numero', formData.orc_numero.trim());
+      fd.append('nome', formData.nome.trim());
+      fd.append('cliente', formData.cliente.trim());
+      fd.append('empreendimento', formData.empreendimento.trim());
       fd.append('tipologia', formData.tipologia);
 
       const levId = await criarLevantamento(fd);

@@ -1,9 +1,31 @@
 from typing import Optional, Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 Flag = Literal["confirmed", "estimated", "missing"]
 Fonte = Literal["dxf", "pdf", "dxf+pdf", "manual"]
+
+
+# ── Auth ─────────────────────────────────────────────────────────────────────
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserOut(BaseModel):
+    id: str
+    email: str
+    is_admin: bool
+
+    class Config:
+        from_attributes = True
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
 
 
 class AmbienteOut(BaseModel):

@@ -5,6 +5,7 @@ import axios from "axios";
 import Link from "next/link";
 import TabelaAmbientes, { type Ambiente } from "@/components/TabelaAmbientes";
 import ExportBar from "@/components/ExportBar";
+import { useAuth } from "@/contexts/AuthContext";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://cotacad-solution.duckdns.org/api";
 
@@ -37,15 +38,16 @@ function ScoreBadge({ label, value, threshold = 70 }: { label: string; value: nu
 export default function ProjetoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { token } = useAuth();
   const [projeto, setProjeto] = useState<Projeto | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     axios
-      .get(`${API}/projeto/${id}`)
+      .get(`${API}/projeto/${id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => { setProjeto(r.data); setLoading(false); })
-      .catch(() => { setLoading(false); router.push("/"); });
-  }, [id, router]);
+      .catch(() => { setLoading(false); router.push("/dashboard"); });
+  }, [id, router, token]);
 
   if (loading) {
     return <p className="text-center py-16 text-gray-400">Carregando projeto...</p>;
@@ -55,10 +57,9 @@ export default function ProjetoPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <Link href="/" className="text-sm text-gray-400 hover:text-brand mb-1 inline-block">
+          <Link href="/dashboard" className="text-sm text-gray-400 hover:text-brand mb-1 inline-block">
             ← Todos os projetos
           </Link>
           <h1 className="text-2xl font-bold text-brand">{projeto.nome}</h1>
@@ -75,7 +76,6 @@ export default function ProjetoPage() {
         <ExportBar projetoId={projeto.id} ambientes={projeto.ambientes} />
       </div>
 
-      {/* Alerta baixa fidelidade */}
       {projeto.fidelidade_score != null && projeto.fidelidade_score < 70 && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 text-sm text-orange-800">
           <strong>⚠️ Fidelidade baixa ({projeto.fidelidade_score}%)</strong> — poucas medidas do PDF coincidem com o DXF.
@@ -83,13 +83,11 @@ export default function ProjetoPage() {
         </div>
       )}
 
-      {/* Tabela */}
       <TabelaAmbientes
         ambientes={projeto.ambientes}
         onChange={(updated) => setProjeto({ ...projeto, ambientes: updated })}
       />
 
-      {/* Resumo */}
       <div className="card text-sm text-gray-500">
         <p>
           <strong>{projeto.ambientes.length}</strong> ambiente(s) detectado(s) —&nbsp;

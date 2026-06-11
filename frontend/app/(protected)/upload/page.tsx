@@ -4,11 +4,13 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import toast from "react-hot-toast";
 import UploadZone from "@/components/UploadZone";
+import { useAuth } from "@/contexts/AuthContext";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://cotacad-solution.duckdns.org/api";
 
 export default function UploadPage() {
   const router = useRouter();
+  const { token } = useAuth();
   const [dxf, setDxf] = useState<File | null>(null);
   const [pdf, setPdf] = useState<File | null>(null);
   const [nome, setNome] = useState("");
@@ -34,7 +36,10 @@ export default function UploadPage() {
 
     try {
       const res = await axios.post(`${API}/upload`, form, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+        },
       });
       toast.success("Projeto analisado com sucesso!", { id: t });
       router.push(`/projeto/${res.data.id}`);
@@ -58,7 +63,6 @@ export default function UploadPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="card space-y-5">
-        {/* Nome */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Nome do projeto
@@ -72,7 +76,6 @@ export default function UploadPage() {
           />
         </div>
 
-        {/* Unidade */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Unidade do projeto
@@ -91,7 +94,6 @@ export default function UploadPage() {
           </p>
         </div>
 
-        {/* Arquivos */}
         <UploadZone
           label="Arquivo DXF (AutoCAD / SketchUp)"
           accept={{ "application/dxf": [".dxf"] }}
@@ -106,7 +108,6 @@ export default function UploadPage() {
           onFile={setPdf}
         />
 
-        {/* Info modo */}
         {dxf && pdf && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
             <strong>Modo DXF + PDF:</strong> O sistema vai comparar os dois arquivos e usar o PDF para complementar medidas faltantes do DXF.
