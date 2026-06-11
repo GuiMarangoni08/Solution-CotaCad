@@ -1,0 +1,46 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    QUANTTUNAI DEPLOY — hPanel Terminal
+═══════════════════════════════════════════════════════════════════════════════
+
+PASSO 1: Abra https://hpanel.hostinger.com
+
+PASSO 2: Login
+  Email: guimarangoni08@gmail.com
+  Senha: Guigui@2013
+
+PASSO 3: Clique em VPS → Terminal (lado direito da tela)
+
+PASSO 4: Copie e cole TUDO isto no terminal web:
+
+═══════════════════════════════════════════════════════════════════════════════
+
+cd /opt/cotacad && git pull origin main && docker-compose -f backend/docker-compose.yml down && docker-compose -f backend/docker-compose.yml up -d --build && sleep 30 && echo "=== STATUS ===" && docker ps | grep cotacad && echo "" && echo "=== HEALTH CHECK ===" && curl -s http://localhost:8000/health && echo "" && echo "=== LOGS ===" && docker-compose -f backend/docker-compose.yml logs api | tail -30
+
+═══════════════════════════════════════════════════════════════════════════════
+
+PASSO 5: Pressione ENTER e aguarde ~5 minutos
+
+ESPERADO NO FINAL:
+  ✓ "status":"ok"
+  ✓ cotacad_db_1  postgres:15-alpine  Up
+  ✓ cotacad_api_1 cotacad:latest      Up
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DEPOIS DO DEPLOY, TESTE:
+
+1. Frontend: https://solution-cota-cad.vercel.app
+   → Deve carregar a página de login
+
+2. Backend: https://cotacad-solution.duckdns.org/health
+   → Deve retornar {"status":"ok"}
+
+3. Login: test@solution.com / teste123
+
+4. Upload um DXF e veja o SCORE DE PRECISÃO aparecer!
+
+═══════════════════════════════════════════════════════════════════════════════
+
+PRONTO! Deploy completo em 5 minutos.
+
+Sucesso! 🚀
