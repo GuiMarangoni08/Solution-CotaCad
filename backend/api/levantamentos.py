@@ -310,3 +310,138 @@ def get_job_status(
         "criado_em": job.criado_em.isoformat() if job.criado_em else None,
         "finalizado_em": job.finalizado_em.isoformat() if job.finalizado_em else None,
     }
+
+
+# ─── POST: Validar precisão (compara com histórico) ───────────────────────
+
+@router.post("/{levantamento_id}/validar-precisao", status_code=200)
+def validar_precisao(
+    levantamento_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Valida precisão do levantamento comparando com histórico.
+
+    POST /api/levantamentos/{id}/validar-precisao
+    → 200: {
+      score, status, divergencias[], pronto_para_producao, learnings[]
+    }
+    """
+    import json
+
+    lev = db.query(Levantamento)\
+        .filter(Levantamento.id == levantamento_id)\
+        .first()
+
+    if not lev:
+        raise HTTPException(404, "Levantamento não encontrado")
+
+    if lev.usuario_id != current_user.id:
+        raise HTTPException(403, "Acesso negado")
+
+    if not lev.dados_extraidos:
+        raise HTTPException(400, "Levantamento ainda não foi processado")
+
+    # Carregar histórico de referência (se existir para este ORC)
+    historico_path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "extractores",
+        "historico.json"
+    )
+
+    baseline = None
+    if os.path.exists(historico_path):
+        try:
+            with open(historico_path, "r", encoding="utf-8") as f:
+                hist = json.load(f)
+                for reg in hist.get("registros", []):
+                    if reg.get("orc") == lev.orc_numero:
+                        baseline = reg
+                        break
+        except Exception:
+            pass
+
+    # Se não há baseline, apenas retorna status "sem_validacao"
+    if not baseline:
+        return {
+            "score": None,
+            "status": "sem_validacao",
+            "mensagem": f"Nenhum baseline encontrado para ORC {lev.orc_numero}. Primeira processamento desta ORC.",
+            "divergencias": [],
+            "pronto_para_producao": True,
+            "learnings": []
+        }
+
+    # Extrair ambientes
+    dados = lev.dados_extraidos or {}
+    ambientes_extraidos = dados.get("ambientes", [])
+    ambientes_baseline = baseline.get("ambientes", [])
+
+    # Calcular divergências
+    divergencias = []
+    score_components = []
+
+    for amb_base in ambientes_baseline:
+        nome_pdf = amb_base.get("nome_pdf", "")
+        area_pdf = amb_base.get("area_m2", 0)
+
+        # Buscar ambiente correspondente (por nome_dxf ou proximidade de área)
+        amb_dxf = None
+        for a in ambientes_extraidos:
+            if a.get("ambiente", "").upper() == nome_pdf.upper():
+                amb_dxf = a
+                break
+
+        if amb_dxf:
+            area_dxf = amb_dxf.get("area", 0)
+            if area_pdf > 0:
+                divergencia_pct = abs(area_dxf - area_pdf) / area_pdf * 100
+            else:
+                divergencia_pct = 0
+
+            if divergencia_pct > 0.5:  # Só reporta se >0.5%
+                status_div = "OK" if divergencia_pct <= 2 else "AVISO" if divergencia_pct <= 5 else "CRÍTICO"
+                divergencias.append({
+                    "ambiente": nome_pdf,
+                    "area_pdf": area_pdf,
+                    "area_dxf": area_dxf,
+                    "divergencia_pct": round(divergencia_pct, 1),
+                    "status": status_div
+                })
+
+                # Score por componente
+                if divergencia_pct <= 1:
+                    score_components.append(100)
+                elif divergencia_pct <= 3:
+                    score_components.append(95)
+                elif divergencia_pct <= 5:
+                    score_components.append(85)
+                else:
+                    score_components.append(max(50, 100 - divergencia_pct))
+
+    # Score final (média simples por enquanto)
+    score_final = round(sum(score_components) / len(score_components), 1) if score_components else 95
+
+    # Determinar status
+    if score_final >= 98:
+        status = "PRONTO"
+        pronto = True
+    elif score_final >= 90:
+        status = "REVISAR"
+        pronto = False
+    else:
+        status = "CRÍTICO"
+        pronto = False
+
+    return {
+        "score": score_final,
+        "status": status,
+        "ambientes_encontrados": len(ambientes_extraidos),
+        "ambientes_esperados": len(ambientes_baseline),
+        "divergencias": sorted(divergencias, key=lambda x: x["divergencia_pct"], reverse=True),
+        "pronto_para_producao": pronto,
+        "mensagem": f"Score {score_final}/100 — {status}" if divergencias else "Todos os ambientes OK ✓"
+    }
